@@ -1,0 +1,7 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY src/dashboard/package.json src/dashboard/package-lock.json* ./
+RUN npm install || true
+COPY src/dashboard ./
+ENV NEXT_PUBLIC_AEO_API=http://localhost:8080/metrics
+CMD ["npm", "run", "dev"]

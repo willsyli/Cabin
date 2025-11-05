@@ -1,0 +1,1 @@
+Prefer edits under src/. Keep schemas in docs/ in sync. Never commit secrets; use .env.

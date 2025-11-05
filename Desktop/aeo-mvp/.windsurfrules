@@ -1,0 +1,1 @@
+Follow PRD in docs/PRD-AEO-MVP.md. Validate JSON against docs schemas. Keep tests deterministic.

@@ -1,0 +1,25 @@
+Product: Agentic Engine Optimization (AEO)
+Objective: Create the first analytics and optimization platform that helps travel brands (Expedia, Booking.com, TripAdvisor, etc.) measure and improve how their MCP endpoints perform in agent-driven ecosystems.
+
+1) Market Need
+- Teams are shipping MCP endpoints but cannot see how often or why agents choose them.
+- No optimization feedback loops; MCPs exist in isolation with no ranking or reputation layer.
+
+2) Target Users
+- Enterprise API/MCP engineering teams, AI partnership leads, product/data analysts in the travel vertical.
+
+3) Competitive Landscape
+- GEO prompt-level tools: Bear AI, Evertune, Profound (optimize output text), not protocol-level AEO.
+- API observability tools measure usage, not agent selection/visibility.
+- Anthropic MCP SDKs provide infra, not analytics or optimization.
+
+4) Differentiator
+- First scoring model and telemetry hooks for MCP visibility and trust.
+- Benchmarking layer to compare Expedia vs Booking vs TripAdvisor performance on standardized intents.
+
+5) MVP & Roadmap
+- Phase 1: Visibility Dashboard (agent simulations + scoring).
+- Phase 2: AEO SDK (auto instrumentation + /aeo/* endpoints).
+
+6) Opportunity
+- As protocols converge (MCP + closed Skills), AEO becomes the “Search Console for agents.”
