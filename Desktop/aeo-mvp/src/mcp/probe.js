@@ -2,9 +2,14 @@
 import fs from "fs";
 import path from "path";
 import fetch from "node-fetch";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 const AEO_API = process.env.AEO_API || "http://localhost:8080";
 const targets = [
+  process.env.AIRBNB_MCP,
   process.env.EXPEDIA_MCP,
   process.env.BOOKING_MCP,
   process.env.TRIP_MCP

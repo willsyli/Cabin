@@ -1,0 +1,18 @@
+{
+  "name": "aeo-mvp",
+  "version": "0.1.0",
+  "description": "Agentic Engine Optimization - MCP endpoint testing and optimization",
+  "type": "module",
+  "main": "src/mcp/probe.js",
+  "scripts": {
+    "probe": "node src/mcp/probe.js",
+    "mcp-client": "node simple-mcp-client.js"
+  },
+  "keywords": ["mcp", "aeo", "agent", "optimization"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.3.1"
+  }
+}

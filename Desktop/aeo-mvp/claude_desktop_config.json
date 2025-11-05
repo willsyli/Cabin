@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "airbnb": {
+      "command": "node",
+      "args": [
+        "/REPLACE/WITH/FULL/PATH/TO/aeo-mvp/simple-mcp-client.js",
+        "https://agentdemo-gamma.vercel.app/api/mcp/airbnb"
+      ],
+      "env": {}
+    }
+  }
+}
