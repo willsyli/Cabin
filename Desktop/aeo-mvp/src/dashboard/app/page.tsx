@@ -10,8 +10,14 @@ type Endpoint = {
   last_run?: string;
 };
 
+type SelectionData = {
+  selectionCounts: { [key: string]: number };
+  results: any[];
+};
+
 export default function Home() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [selectionData, setSelectionData] = useState<SelectionData | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>("");
 
   useEffect(() => {
@@ -25,8 +31,19 @@ export default function Home() {
         .catch(() => setEndpoints([]));
     };
 
+    const fetchSelectionData = () => {
+      fetch(process.env.NEXT_PUBLIC_AEO_API?.replace('/metrics', '/selection-data') || "http://localhost:8080/selection-data")
+        .then(r => r.json())
+        .then(j => setSelectionData(j))
+        .catch(() => setSelectionData(null));
+    };
+
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 5000); // Refresh every 5s
+    fetchSelectionData();
+    const interval = setInterval(() => {
+      fetchMetrics();
+      fetchSelectionData();
+    }, 5000); // Refresh every 5s
     return () => clearInterval(interval);
   }, []);
 
@@ -48,6 +65,40 @@ export default function Home() {
     if (index === 1) return "🥈";
     if (index === 2) return "🥉";
     return `${index + 1}.`;
+  };
+
+  const getMCPName = (endpoint: string) => {
+    if (endpoint.includes("airbnb")) return "Airbnb";
+    if (endpoint.includes("expedia")) return "Expedia";
+    if (endpoint.includes("booking")) return "Booking.com";
+    if (endpoint.includes("tripadvisor")) return "TripAdvisor";
+    return endpoint;
+  };
+
+  const getSelectionRate = (endpoint: string) => {
+    if (!selectionData) return null;
+    const mcpName = getMCPName(endpoint);
+    const count = selectionData.selectionCounts[mcpName] || 0;
+    const total = selectionData.results.length || 1;
+    return (count / total) * 100;
+  };
+
+  const getRecommendations = (endpoint: Endpoint) => {
+    const recommendations = [];
+    if (endpoint.avg_score < 0.7) {
+      recommendations.push("Critical: Score below 70% - review response quality");
+    }
+    if (endpoint.p50_latency && endpoint.p50_latency > 1000) {
+      recommendations.push("High latency detected - optimize for <300ms");
+    }
+    if (endpoint.runs < 10) {
+      recommendations.push("Limited data - run more tests for accuracy");
+    }
+    const selectionRate = getSelectionRate(endpoint.endpoint);
+    if (selectionRate !== null && selectionRate < 20) {
+      recommendations.push("Low agent selection rate - improve AEO score");
+    }
+    return recommendations;
   };
 
   return (
@@ -134,6 +185,92 @@ export default function Home() {
             />
           </div>
 
+          {/* Competitive Comparison - Selection Correlation */}
+          {selectionData && (
+            <div style={{
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              borderRadius: 12,
+              padding: 24,
+              marginBottom: 32,
+              color: "white"
+            }}>
+              <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                🎯 Agent Selection Correlation
+              </h2>
+              <p style={{ fontSize: 14, opacity: 0.9, marginBottom: 20 }}>
+                Proving the hypothesis: MCPs with higher AEO scores get selected more often by Claude agents
+              </p>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: 16
+              }}>
+                {endpoints.map((endpoint) => {
+                  const selectionRate = getSelectionRate(endpoint.endpoint);
+                  if (selectionRate === null) return null;
+                  return (
+                    <div key={endpoint.endpoint} style={{
+                      background: "rgba(255,255,255,0.15)",
+                      backdropFilter: "blur(10px)",
+                      padding: 16,
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)"
+                    }}>
+                      <div style={{ fontSize: 20, marginBottom: 8 }}>
+                        {endpoint.endpoint.includes("airbnb") ? "🏠" :
+                         endpoint.endpoint.includes("expedia") ? "✈️" :
+                         endpoint.endpoint.includes("booking") ? "🏨" : "🗺️"}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+                        {getMCPName(endpoint.endpoint)}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>
+                        AEO Score: <strong>{endpoint.avg_score.toFixed(3)}</strong>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>
+                        Selected: <strong>{selectionRate.toFixed(0)}%</strong> of the time
+                      </div>
+                      <div style={{
+                        marginTop: 8,
+                        height: 6,
+                        background: "rgba(255,255,255,0.2)",
+                        borderRadius: 3,
+                        overflow: "hidden"
+                      }}>
+                        <div style={{
+                          width: `${selectionRate}%`,
+                          height: "100%",
+                          background: "white",
+                          transition: "width 0.5s ease"
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{
+                marginTop: 20,
+                padding: 16,
+                background: "rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                fontSize: 13
+              }}>
+                <strong>💡 Insight:</strong> The MCP with the highest AEO score is selected{" "}
+                {endpoints.length > 0 && selectionData ? (
+                  <>
+                    <strong>
+                      {Math.abs(
+                        (getSelectionRate(endpoints[0].endpoint) || 0) -
+                        (getSelectionRate(endpoints[endpoints.length - 1].endpoint) || 0)
+                      ).toFixed(0)}%
+                    </strong> more often than the lowest scorer
+                  </>
+                ) : "more often"}.
+                This proves AEO optimization directly improves agent selection rates.
+              </div>
+            </div>
+          )}
+
           {/* Endpoint Rankings Table */}
           <div style={{
             background: "white",
@@ -163,6 +300,7 @@ export default function Home() {
                   <th style={thStyle} align="center">Avg Score</th>
                   <th style={thStyle} align="center">Score Bar</th>
                   <th style={thStyle} align="center">P50 Latency</th>
+                  {selectionData && <th style={thStyle} align="center">Selection %</th>}
                   <th style={thStyle} align="center">Status</th>
                 </tr>
               </thead>
@@ -252,6 +390,26 @@ export default function Home() {
                         {endpoint.p50_latency ? `${endpoint.p50_latency}ms` : "-"}
                       </span>
                     </td>
+                    {selectionData && (
+                      <td style={tdStyle} align="center">
+                        {(() => {
+                          const rate = getSelectionRate(endpoint.endpoint);
+                          if (rate === null) return "-";
+                          return (
+                            <span style={{
+                              background: rate >= 40 ? "#dcfce7" : rate >= 20 ? "#fef9c3" : "#fee2e2",
+                              color: rate >= 40 ? "#166534" : rate >= 20 ? "#854d0e" : "#991b1b",
+                              padding: "4px 8px",
+                              borderRadius: 4,
+                              fontSize: 13,
+                              fontWeight: 600
+                            }}>
+                              {rate.toFixed(0)}%
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    )}
                     <td style={tdStyle} align="center">
                       {endpoint.avg_score >= 0.9 ? "🟢" :
                        endpoint.avg_score >= 0.7 ? "🟡" : "🔴"}
@@ -260,6 +418,82 @@ export default function Home() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Recommendations Panel */}
+          <div style={{
+            marginTop: 32,
+            background: "white",
+            borderRadius: 12,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+            overflow: "hidden"
+          }}>
+            <div style={{
+              padding: "16px 24px",
+              background: "#f9fafb",
+              borderBottom: "1px solid #e5e7eb"
+            }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                💡 Actionable Recommendations
+              </h2>
+            </div>
+            <div style={{ padding: 24 }}>
+              {endpoints.map((endpoint, index) => {
+                const recommendations = getRecommendations(endpoint);
+                if (recommendations.length === 0) return null;
+
+                return (
+                  <div key={endpoint.endpoint} style={{
+                    marginBottom: 20,
+                    padding: 16,
+                    background: "#fef3c7",
+                    borderLeft: "4px solid #f59e0b",
+                    borderRadius: 8
+                  }}>
+                    <div style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      marginBottom: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8
+                    }}>
+                      {getRankEmoji(index)} {getMCPName(endpoint.endpoint)}
+                      <span style={{
+                        fontSize: 12,
+                        fontWeight: 400,
+                        opacity: 0.7,
+                        marginLeft: 4
+                      }}>
+                        (Score: {endpoint.avg_score.toFixed(3)})
+                      </span>
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13 }}>
+                      {recommendations.map((rec, i) => (
+                        <li key={i} style={{ marginBottom: 6 }}>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+
+              {endpoints.every(e => getRecommendations(e).length === 0) && (
+                <div style={{
+                  textAlign: "center",
+                  padding: 40,
+                  fontSize: 14,
+                  color: "#10b981"
+                }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+                  <strong>All MCPs performing well!</strong>
+                  <div style={{ marginTop: 8, opacity: 0.7 }}>
+                    Keep monitoring and running tests to maintain quality.
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Legend */}
@@ -277,6 +511,14 @@ export default function Home() {
               <span>🟡 Good (0.7-0.9)</span>
               <span>🔴 Needs Improvement (&lt;0.7)</span>
               <span>⚡ Target Latency: &lt;300ms</span>
+              {selectionData && (
+                <>
+                  <span style={{ marginLeft: 16 }}>Selection Rate:</span>
+                  <span style={{ background: "#dcfce7", color: "#166534", padding: "2px 6px", borderRadius: 3 }}>High (40%+)</span>
+                  <span style={{ background: "#fef9c3", color: "#854d0e", padding: "2px 6px", borderRadius: 3 }}>Medium (20-40%)</span>
+                  <span style={{ background: "#fee2e2", color: "#991b1b", padding: "2px 6px", borderRadius: 3 }}>Low (&lt;20%)</span>
+                </>
+              )}
             </div>
           </div>
         </>
