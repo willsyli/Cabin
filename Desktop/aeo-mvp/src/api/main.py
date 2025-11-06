@@ -1,10 +1,20 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 from .scoring import score
 from .storage import add_probe, metrics_snapshot
 
 app = FastAPI(title="AEO API", version="0.1")
+
+# Add CORS middleware to allow dashboard to fetch data
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class Features(BaseModel):
