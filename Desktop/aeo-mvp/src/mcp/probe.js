@@ -81,7 +81,8 @@ function featuresFrom(result, latency_ms, method = "listHomes") {
   if (result?.result?.content?.[0]?.text) {
     try {
       data = JSON.parse(result.result.content[0].text);
-      listings = Array.isArray(data) ? data : [];
+      // Handle both formats: array or object with homes property
+      listings = Array.isArray(data) ? data : (data?.homes || []);
     } catch (e) {
       data = result.result.content[0].text;
     }
@@ -106,11 +107,14 @@ function featuresFrom(result, latency_ms, method = "listHomes") {
   // Completeness varies by method
   let completeness_ratio = 0.0;
   if (method === "listHomes") {
-    // Required fields for Airbnb: id, name, description, stars, price
+    // Required fields: id, title/name, price, location, availability
+    // Check for either "name" (Airbnb) or "title" (mocks)
     completeness_ratio = listings.length
-      ? listings.map(l => ["id","name","description","stars","price"]
-        .filter(k => l[k] !== undefined && l[k] !== null).length / 5)
-        .reduce((a,b)=>a+b,0) / listings.length
+      ? listings.map(l => {
+          const hasTitle = l.name || l.title;
+          const requiredFields = [l.id, hasTitle, l.price, l.location, l.availability];
+          return requiredFields.filter(v => v !== undefined && v !== null).length / 5;
+        }).reduce((a,b)=>a+b,0) / listings.length
       : 0.0;
   } else if (method === "reserveHome") {
     // Required fields for reservation: success, bookingId, message
@@ -155,8 +159,10 @@ async function testBookingFlow(url) {
 
   if (searchResult.json?.result?.content?.[0]?.text) {
     try {
-      homes = JSON.parse(searchResult.json.result.content[0].text);
-      if (Array.isArray(homes) && homes.length > 0) {
+      const parsedData = JSON.parse(searchResult.json.result.content[0].text);
+      // Handle both formats: array or object with homes property
+      homes = Array.isArray(parsedData) ? parsedData : (parsedData?.homes || []);
+      if (homes.length > 0) {
         firstHome = homes[0];
       }
     } catch (e) {
@@ -170,7 +176,8 @@ async function testBookingFlow(url) {
   }
 
   flowResults.completion_status.search_completed = true;
-  console.log(`  ✅ Search completed. Found ${homes.length} home(s). First home: ${firstHome.name} (ID: ${firstHome.id}, Price: $${firstHome.price})`);
+  const homeName = firstHome.name || firstHome.title || 'Unknown';
+  console.log(`  ✅ Search completed. Found ${homes.length} home(s). First home: ${homeName} (ID: ${firstHome.id}, Price: $${firstHome.price})`);
 
   // Step 2: Reserve home (if enabled)
   if (TEST_BOOKING_FLOW) {

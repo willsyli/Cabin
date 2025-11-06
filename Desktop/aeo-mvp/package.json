@@ -7,17 +7,22 @@
   "scripts": {
     "probe": "node src/mcp/probe.js",
     "mcp-client": "node simple-mcp-client.js",
-    "mock-mcps": "node mock-mcps.js",
+    "mock-mcps": "node mock-mcps.cjs",
     "agent-select": "node agent-simulator.js",
     "analyze": "node analyze-results.js"
   },
-  "keywords": ["mcp", "aeo", "agent", "optimization"],
+  "keywords": [
+    "mcp",
+    "aeo",
+    "agent",
+    "optimization"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "node-fetch": "^3.3.2",
+    "@anthropic-ai/sdk": "^0.27.0",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "@anthropic-ai/sdk": "^0.27.0"
+    "express": "^4.21.2",
+    "node-fetch": "^3.3.2"
   }
 }

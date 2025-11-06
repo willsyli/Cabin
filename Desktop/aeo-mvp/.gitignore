@@ -31,3 +31,4 @@ build/
 # Test outputs
 runs/
 *.json.bak
+venv/
