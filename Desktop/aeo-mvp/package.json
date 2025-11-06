@@ -8,7 +8,8 @@
     "probe": "node src/mcp/probe.js",
     "mcp-client": "node simple-mcp-client.js",
     "mock-mcps": "node mock-mcps.js",
-    "agent-select": "node agent-simulator.js"
+    "agent-select": "node agent-simulator.js",
+    "analyze": "node analyze-results.js"
   },
   "keywords": ["mcp", "aeo", "agent", "optimization"],
   "author": "",
