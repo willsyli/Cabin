@@ -17,8 +17,7 @@ def metrics_snapshot():
         e = p["endpoint"]
         agg.setdefault(e, {"count":0, "scores":[], "latencies":[]})
         agg[e]["count"] += 1
-        agg[e]["scores"].append(p["selection_score"]
-        )
+        agg[e]["scores"].append(p["selection_score"])
         agg[e]["latencies"].append(p["features"]["latency_ms"])
     out = []
     for e,v in agg.items():
