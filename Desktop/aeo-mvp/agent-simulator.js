@@ -138,7 +138,7 @@ Respond with ONLY the name of the MCP you selected and a brief reason (max 50 wo
 Format: "SELECTED: [MCP Name] - [reason]"`;
 
   const message = await anthropic.messages.create({
-    model: "claude-3-5-sonnet-20240620",
+    model: "claude-3-sonnet-20240229",
     max_tokens: 200,
     messages: [{ role: "user", content: prompt }]
   });
