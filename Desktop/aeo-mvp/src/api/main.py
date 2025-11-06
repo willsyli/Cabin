@@ -1,10 +1,23 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List, Optional
+import json
+import os
+from pathlib import Path
 from .scoring import score
 from .storage import add_probe, metrics_snapshot
 
 app = FastAPI(title="AEO API", version="0.1")
+
+# Add CORS middleware to allow dashboard to fetch data
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class Features(BaseModel):
@@ -34,6 +47,25 @@ def score_endpoint(body: ScoreReq):
 @app.get("/metrics")
 def metrics():
     return {"endpoints": metrics_snapshot()}
+
+@app.get("/selection-data")
+def selection_data():
+    """Return latest agent selection experiment data"""
+    # Find the selection-experiments directory
+    exp_dir = Path(__file__).parent.parent.parent / "selection-experiments"
+
+    if not exp_dir.exists():
+        return {"selectionCounts": {}, "results": []}
+
+    # Get the latest JSON file
+    json_files = sorted(exp_dir.glob("*.json"), reverse=True)
+    if not json_files:
+        return {"selectionCounts": {}, "results": []}
+
+    # Read and return the latest selection data
+    with open(json_files[0], 'r') as f:
+        data = json.load(f)
+        return data
 
 class BenchmarkReq(BaseModel):
     runs: List[Dict]
