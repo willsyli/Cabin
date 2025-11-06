@@ -17,38 +17,30 @@ const targets = [
   process.env.TRIP_MCP
 ].filter(Boolean);
 
-// Complete booking flow: search → quote → book
+// Complete booking flow: search → reserve
+// Airbnb agent uses: listHomes and reserveHome
 const bookingFlowTemplate = {
   search: {
-    method: "search_listings",
+    method: "listHomes",
     params: {
-      location: "Mexico City, MX",
-      check_in: "2025-12-05",
-      check_out: "2025-12-08",
-      guests: 6,
-      filters: { bedrooms_min: 3, price_max: 250, rating_min: 4.5, free_cancellation: true }
-    }
-  },
-  quote: {
-    method: "quote_total",
-    params: {
-      check_in: "2025-12-05",
-      check_out: "2025-12-08",
+      destination: "Mexico City",
+      checkinDate: "2025-12-05",
+      checkoutDate: "2025-12-08",
       guests: 6
     }
   },
   book: {
-    method: "create_booking",
+    method: "reserveHome",
     params: {
-      check_in: "2025-12-05",
-      check_out: "2025-12-08",
-      guests: 6,
-      guest_details: {
-        name: "AEO Test User",
-        email: "aeo-test@example.com",
-        phone: "+1234567890"
-      },
-      payment_method: "test_simulation"
+      startDate: "2025-12-05",
+      endDate: "2025-12-08",
+      creditCardNumber: "4111111111111111",
+      expirationDate: "12/26",
+      ccv: "123",
+      firstName: "AEO",
+      lastName: "TestUser",
+      address: "123 Test St, Test City, TC 12345",
+      phoneNumber: "+1234567890"
     }
   }
 };
@@ -70,40 +62,56 @@ async function callMcp(url, method, params) {
   }
 }
 
-function featuresFrom(result, latency_ms, method = "search_listings") {
-  const ok = !!result?.result?.data;
-  const data = result?.result?.data || {};
-  const listings = Array.isArray(data.listings) ? data.listings : [];
-  const json_valid = !!data && typeof data === "object";
+function featuresFrom(result, latency_ms, method = "listHomes") {
+  // Handle Airbnb agent response structure
+  const ok = !!result?.result?.content?.[0]?.text || !!result?.result;
+
+  let data = null;
+  let listings = [];
+
+  // Airbnb returns results in content[0].text as JSON string
+  if (result?.result?.content?.[0]?.text) {
+    try {
+      data = JSON.parse(result.result.content[0].text);
+      listings = Array.isArray(data) ? data : [];
+    } catch (e) {
+      data = result.result.content[0].text;
+    }
+  } else if (result?.result) {
+    data = result.result;
+  }
+
+  const json_valid = !!data && (typeof data === "object" || typeof data === "string");
 
   // Price transparency varies by method
   let price_transparency = false;
-  if (method === "search_listings") {
+  if (method === "listHomes") {
+    // Airbnb listings include: id, name, description, stars, price
     price_transparency = listings.length
-      ? listings.every(l => l?.fees && typeof l.total_estimate === "number")
+      ? listings.every(l => typeof l?.price === "number")
       : false;
-  } else if (method === "quote_total" || method === "create_booking") {
-    price_transparency = !!data?.total && !!data?.fees;
+  } else if (method === "reserveHome") {
+    // Reservation response: {success, bookingId, message}
+    price_transparency = !!data?.success;
   }
 
   // Completeness varies by method
   let completeness_ratio = 0.0;
-  if (method === "search_listings") {
+  if (method === "listHomes") {
+    // Required fields for Airbnb: id, name, description, stars, price
     completeness_ratio = listings.length
-      ? listings.map(l => ["id","title","price","currency","location","availability","fees","photos"]
-        .filter(k => l[k] !== undefined).length / 8)
+      ? listings.map(l => ["id","name","description","stars","price"]
+        .filter(k => l[k] !== undefined && l[k] !== null).length / 5)
         .reduce((a,b)=>a+b,0) / listings.length
       : 0.0;
-  } else if (method === "quote_total") {
-    const requiredFields = ["total", "fees", "currency", "breakdown"];
-    completeness_ratio = requiredFields.filter(k => data[k] !== undefined).length / requiredFields.length;
-  } else if (method === "create_booking") {
-    const requiredFields = ["booking_id", "status", "confirmation_code", "total"];
-    completeness_ratio = requiredFields.filter(k => data[k] !== undefined).length / requiredFields.length;
+  } else if (method === "reserveHome") {
+    // Required fields for reservation: success, bookingId, message
+    const requiredFields = ["success", "bookingId", "message"];
+    completeness_ratio = requiredFields.filter(k => data?.[k] !== undefined).length / requiredFields.length;
   }
 
-  const updated = data?.as_of || listings[0]?.updated_at;
-  const freshness_hours = updated ? (Date.now() - new Date(updated).getTime()) / 36e5 : 9999;
+  // Freshness - assume current for demo data
+  const freshness_hours = 0; // Airbnb demo doesn't include timestamps
 
   return { ok, latency_ms, json_valid, price_transparency, completeness_ratio, freshness_hours };
 }
@@ -116,16 +124,15 @@ async function testBookingFlow(url) {
     steps: [],
     completion_status: {
       search_completed: false,
-      quote_completed: false,
       booking_completed: false,
       overall_success: false
     }
   };
 
-  // Step 1: Search for listings
-  console.log("  📋 Step 1/3: Searching for listings...");
+  // Step 1: List homes
+  console.log("  📋 Step 1/2: Listing available homes...");
   const searchResult = await callMcp(url, bookingFlowTemplate.search.method, bookingFlowTemplate.search.params);
-  const searchFeatures = featuresFrom(searchResult.json, searchResult.latency_ms, "search_listings");
+  const searchFeatures = featuresFrom(searchResult.json, searchResult.latency_ms, "listHomes");
 
   flowResults.steps.push({
     step: "search",
@@ -134,43 +141,35 @@ async function testBookingFlow(url) {
     raw_result: searchResult.json
   });
 
-  if (!searchFeatures.ok || !searchResult.json?.result?.data?.listings?.length) {
+  // Parse Airbnb response (returns JSON in content[0].text)
+  let homes = [];
+  let firstHome = null;
+
+  if (searchResult.json?.result?.content?.[0]?.text) {
+    try {
+      homes = JSON.parse(searchResult.json.result.content[0].text);
+      if (Array.isArray(homes) && homes.length > 0) {
+        firstHome = homes[0];
+      }
+    } catch (e) {
+      console.log(`  ❌ Failed to parse homes response: ${e.message}`);
+    }
+  }
+
+  if (!searchFeatures.ok || !firstHome) {
     console.log("  ❌ Search failed or returned no results");
     return flowResults;
   }
 
   flowResults.completion_status.search_completed = true;
-  const firstListing = searchResult.json.result.data.listings[0];
-  const listingId = firstListing.id;
-  console.log(`  ✅ Search completed. Found listing: ${listingId}`);
+  console.log(`  ✅ Search completed. Found ${homes.length} home(s). First home: ${firstHome.name} (ID: ${firstHome.id}, Price: $${firstHome.price})`);
 
-  // Step 2: Get quote for the first listing
-  console.log("  💰 Step 2/3: Getting quote for listing...");
-  const quoteParams = { ...bookingFlowTemplate.quote.params, listing_id: listingId };
-  const quoteResult = await callMcp(url, bookingFlowTemplate.quote.method, quoteParams);
-  const quoteFeatures = featuresFrom(quoteResult.json, quoteResult.latency_ms, "quote_total");
-
-  flowResults.steps.push({
-    step: "quote",
-    method: bookingFlowTemplate.quote.method,
-    features: quoteFeatures,
-    raw_result: quoteResult.json
-  });
-
-  if (!quoteFeatures.ok) {
-    console.log("  ❌ Quote failed");
-    return flowResults;
-  }
-
-  flowResults.completion_status.quote_completed = true;
-  console.log(`  ✅ Quote completed. Total: ${quoteResult.json?.result?.data?.total || "N/A"}`);
-
-  // Step 3: Create booking (simulation only)
+  // Step 2: Reserve home (if enabled)
   if (TEST_BOOKING_FLOW) {
-    console.log("  🎫 Step 3/3: Creating booking (test simulation)...");
-    const bookParams = { ...bookingFlowTemplate.book.params, listing_id: listingId };
+    console.log("  🎫 Step 2/2: Reserving home (test simulation)...");
+    const bookParams = { ...bookingFlowTemplate.book.params, homeId: firstHome.id };
     const bookResult = await callMcp(url, bookingFlowTemplate.book.method, bookParams);
-    const bookFeatures = featuresFrom(bookResult.json, bookResult.latency_ms, "create_booking");
+    const bookFeatures = featuresFrom(bookResult.json, bookResult.latency_ms, "reserveHome");
 
     flowResults.steps.push({
       step: "book",
@@ -179,18 +178,27 @@ async function testBookingFlow(url) {
       raw_result: bookResult.json
     });
 
-    if (!bookFeatures.ok) {
-      console.log("  ❌ Booking creation failed");
+    // Parse reservation response
+    let reservation = null;
+    if (bookResult.json?.result?.content?.[0]?.text) {
+      try {
+        reservation = JSON.parse(bookResult.json.result.content[0].text);
+      } catch (e) {
+        console.log(`  ❌ Failed to parse reservation response: ${e.message}`);
+      }
+    }
+
+    if (!bookFeatures.ok || !reservation?.success) {
+      console.log(`  ❌ Booking failed: ${reservation?.message || "Unknown error"}`);
     } else {
       flowResults.completion_status.booking_completed = true;
-      console.log(`  ✅ Booking completed. ID: ${bookResult.json?.result?.data?.booking_id || "N/A"}`);
+      console.log(`  ✅ Booking completed. Booking ID: ${reservation.bookingId}, Message: ${reservation.message}`);
     }
   }
 
   // Overall success if all enabled steps completed
   flowResults.completion_status.overall_success =
     flowResults.completion_status.search_completed &&
-    flowResults.completion_status.quote_completed &&
     (TEST_BOOKING_FLOW ? flowResults.completion_status.booking_completed : true);
 
   console.log(`  ${flowResults.completion_status.overall_success ? "✅" : "❌"} Overall flow status: ${flowResults.completion_status.overall_success ? "SUCCESS" : "FAILED"}`);
