@@ -45,13 +45,21 @@ const bookingFlowTemplate = {
   }
 };
 
-async function callMcp(url, method, params) {
+async function callMcp(url, toolName, toolArguments) {
   const t0 = Date.now();
   try {
     const r = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 })
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: toolName,
+          arguments: toolArguments
+        },
+        id: 1
+      })
     });
     const json = await r.json();
     const latency_ms = Date.now() - t0;
